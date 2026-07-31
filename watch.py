@@ -76,7 +76,7 @@ def render(jobs):
 
 def send_email(subject, text, body_html):
     user = os.environ["GMAIL_USER"]
-    password = os.environ["GMAIL_APP_PASSWORD"]
+    password = os.environ["GMAIL_APP_PASSWORD"].replace(" ", "")
     to = os.environ.get("EMAIL_TO", user)
 
     msg = EmailMessage()
