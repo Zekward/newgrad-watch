@@ -74,6 +74,36 @@ def render(jobs):
     return "\n".join(lines), body_html
 
 
+def fake_jobs(now):
+    """Three obviously-fake postings, for verifying delivery end to end."""
+    return [
+        {
+            "company_name": "Fake Corp",
+            "title": "Software Engineer, New Grad",
+            "locations": ["San Francisco, CA", "Remote"],
+            "category": "Software",
+            "url": "https://example.com/fake-job-1",
+            "date_posted": now,
+        },
+        {
+            "company_name": "Test Industries",
+            "title": "Machine Learning Engineer I",
+            "locations": ["New York, NY"],
+            "category": "AI/ML/Data",
+            "url": "https://example.com/fake-job-2",
+            "date_posted": now,
+        },
+        {
+            "company_name": "Placeholder Capital",
+            "title": "Quantitative Researcher",
+            "locations": ["Chicago, IL"],
+            "category": "Quant",
+            "url": "https://example.com/fake-job-3",
+            "date_posted": now,
+        },
+    ]
+
+
 def send_email(subject, text, body_html):
     user = os.environ["GMAIL_USER"]
     password = os.environ["GMAIL_APP_PASSWORD"].replace(" ", "")
@@ -95,9 +125,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="print the digest instead of emailing")
     ap.add_argument("--feed-file", help="read the feed from a local file instead of the network")
+    ap.add_argument("--test-email", action="store_true", help="email fake postings to verify delivery; leaves state untouched")
     args = ap.parse_args()
 
     now = time.time()
+    if args.test_email:
+        jobs = fake_jobs(now)
+        text, body_html = render(jobs)
+        send_email(f"[new grad] TEST — {len(jobs)} fake postings", text, body_html)
+        print(f"sent test email with {len(jobs)} fake postings")
+        return
+
     feed = json.loads(Path(args.feed_file).read_text()) if args.feed_file else fetch_feed()
     all_ids = {j["id"] for j in feed}
     relevant = {j["id"]: j for j in feed if is_relevant(j, now)}
