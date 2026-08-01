@@ -21,6 +21,7 @@ from pathlib import Path
 FEED_URL = "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json"
 STATE_PATH = Path(__file__).resolve().parent / "state" / "seen.json"
 MAX_AGE_DAYS = 30
+MAX_PER_EMAIL = 50
 CATEGORIES = {"Software", "AI/ML/Data", "Quant"}
 
 
@@ -50,7 +51,7 @@ def save_seen(ids):
     STATE_PATH.write_text(json.dumps(sorted(ids), indent=0) + "\n")
 
 
-def render(jobs):
+def render(jobs, held=0):
     """Return (plain_text, html) for the new-jobs digest."""
     jobs = sorted(jobs, key=lambda j: (j["company_name"].lower(), j["title"].lower()))
     lines, rows = [], []
@@ -65,9 +66,12 @@ def render(jobs):
             f"<div style='color:#666;font-size:13px'>{html.escape(where)} · {html.escape(j['category'])} · posted {posted}</div></td>"
             "</tr>"
         )
+    overflow = f" {held} more are queued for the next run." if held else ""
+    if held:
+        lines.append(f"({held} more queued for the next run.)")
     body_html = (
         "<div style='font-family:-apple-system,Segoe UI,sans-serif;font-size:14px'>"
-        f"<p>{len(jobs)} new posting{'s' if len(jobs) != 1 else ''}.</p>"
+        f"<p>{len(jobs)} new posting{'s' if len(jobs) != 1 else ''}.{overflow}</p>"
         f"<table style='border-collapse:collapse'>{''.join(rows)}</table>"
         "<p style='color:#888;font-size:12px'>Source: SimplifyJobs/New-Grad-Positions</p></div>"
     )
@@ -149,24 +153,33 @@ def main():
         print(f"bootstrapped: {len(all_ids)} ids recorded, {len(relevant)} currently relevant, no email sent")
         return
 
-    new = [job for jid, job in relevant.items() if jid not in seen]
+    new = sorted(
+        (job for jid, job in relevant.items() if jid not in seen),
+        key=lambda j: j["date_posted"],
+        reverse=True,
+    )
+    batch = new[:MAX_PER_EMAIL]
     if not args.dry_run:
         # Keep ids that are still upstream so a delisted-then-relisted job doesn't re-alert,
-        # and drop ids that fell out of the feed entirely so state stays bounded.
-        save_seen((seen & all_ids) | set(relevant))
+        # and drop ids that fell out of the feed entirely so state stays bounded. Only the
+        # postings actually emailed get marked seen, so any overflow rolls into the next run.
+        save_seen((seen & all_ids) | {j["id"] for j in batch})
 
-    if not new:
+    if not batch:
         print("no new postings")
         return
 
-    subject = f"[new grad] {len(new)} new posting{'s' if len(new) != 1 else ''}"
-    text, body_html = render(new)
+    held = len(new) - len(batch)
+    subject = f"[new grad] {len(batch)} new posting{'s' if len(batch) != 1 else ''}"
+    if held:
+        subject += f" (+{held} queued)"
+    text, body_html = render(batch, held)
     if args.dry_run:
         print(subject)
         print(text)
         return
     send_email(subject, text, body_html)
-    print(f"emailed {len(new)} postings")
+    print(f"emailed {len(batch)} postings" + (f", {held} held for the next run" if held else ""))
 
 
 if __name__ == "__main__":

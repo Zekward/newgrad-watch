@@ -3,7 +3,7 @@
 Emails you new-grad postings the moment they land in
 [SimplifyJobs/New-Grad-Positions](https://github.com/SimplifyJobs/New-Grad-Positions).
 Simplify scrapes company career pages hourly and commits new rows to
-`.github/scripts/listings.json`; this repo polls that file every 30 minutes,
+`.github/scripts/listings.json`; this repo polls that file three times a day,
 diffs it against what it saw last time, and emails the delta.
 
 ## What gets emailed
@@ -11,6 +11,10 @@ diffs it against what it saw last time, and emails the delta.
 A posting has to be `active`, `is_visible`, in one of `Software` / `AI/ML/Data` /
 `Quant`, and posted within the last 30 days. Edit `CATEGORIES` and `MAX_AGE_DAYS`
 at the top of [watch.py](watch.py) to change that.
+
+Each email carries at most `MAX_PER_EMAIL` (50) postings, newest first. Anything
+over that stays unseen and rolls into the next run rather than being dropped, so
+a backlog drains 50 at a time instead of arriving as one wall of text.
 
 ## Setup
 
@@ -22,7 +26,8 @@ Add three repo secrets (Settings → Secrets and variables → Actions):
 | `GMAIL_APP_PASSWORD` | a 16-char app password from https://myaccount.google.com/apppasswords (needs 2FA on) |
 | `EMAIL_TO` | where to deliver; defaults to `GMAIL_USER` if unset |
 
-Then enable Actions. The workflow runs `*/30 * * * *` and on manual dispatch.
+Then enable Actions. The workflow runs `0 13,17,21 * * *` — 9am / 1pm / 5pm US
+Eastern — and on manual dispatch.
 
 ## State
 
