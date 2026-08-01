@@ -106,7 +106,9 @@ def fake_jobs(now):
 
 def send_email(subject, text, body_html):
     user = os.environ["GMAIL_USER"]
-    password = os.environ["GMAIL_APP_PASSWORD"].replace(" ", "")
+    # Google renders app passwords in four groups separated by non-breaking spaces,
+    # so strip all whitespace rather than just U+0020.
+    password = "".join(os.environ["GMAIL_APP_PASSWORD"].split())
     to = os.environ.get("EMAIL_TO", user)
 
     msg = EmailMessage()
