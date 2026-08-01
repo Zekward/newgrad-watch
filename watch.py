@@ -27,7 +27,9 @@ except Exception:  # no system tzdata available
 
 FEED_URL = "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json"
 STATE_PATH = Path(__file__).resolve().parent / "state" / "seen.json"
-MAX_AGE_DAYS = 30
+# Simplify often discovers a posting days after the company published it, so a listing
+# can be new to us while being stale to apply to. This caps how old a posting may be.
+MAX_AGE_DAYS = 7
 MAX_PER_EMAIL = 50
 CATEGORIES = {"Software", "AI/ML/Data", "Quant"}
 
@@ -77,7 +79,7 @@ def posted_str(ts, now):
 
 def render(jobs, held=0):
     """Return (plain_text, html) for the new-jobs digest."""
-    jobs = sorted(jobs, key=lambda j: (j["company_name"].lower(), j["title"].lower()))
+    jobs = sorted(jobs, key=lambda j: j["date_posted"], reverse=True)
     now = time.time()
     lines, rows = [], []
     for j in jobs:

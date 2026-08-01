@@ -9,8 +9,14 @@ diffs it against what it saw last time, and emails the delta.
 ## What gets emailed
 
 A posting has to be `active`, `is_visible`, in one of `Software` / `AI/ML/Data` /
-`Quant`, and posted within the last 30 days. Edit `CATEGORIES` and `MAX_AGE_DAYS`
+`Quant`, and posted within the last 7 days. Edit `CATEGORIES` and `MAX_AGE_DAYS`
 at the top of [watch.py](watch.py) to change that.
+
+`MAX_AGE_DAYS` matters more than it looks. Simplify frequently adds a listing to
+the feed days or weeks after the company posted it, so "never seen before" and
+"recently posted" are different things — without the cap, a first sighting of a
+three-week-old job arrives looking like breaking news. Emails are ordered newest
+first.
 
 Each email carries at most `MAX_PER_EMAIL` (50) postings, newest first. Anything
 over that stays unseen and rolls into the next run rather than being dropped, so
