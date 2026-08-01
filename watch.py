@@ -18,6 +18,13 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 from pathlib import Path
 
+try:
+    from zoneinfo import ZoneInfo
+
+    EASTERN = ZoneInfo("America/New_York")
+except Exception:  # no system tzdata available
+    EASTERN = timezone.utc
+
 FEED_URL = "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json"
 STATE_PATH = Path(__file__).resolve().parent / "state" / "seen.json"
 MAX_AGE_DAYS = 30
@@ -51,13 +58,31 @@ def save_seen(ids):
     STATE_PATH.write_text(json.dumps(sorted(ids), indent=0) + "\n")
 
 
+def posted_str(ts, now):
+    """'Jul 31 6:14pm ET · 5h ago'. Rows whose timestamp is exactly UTC midnight carry
+    no real time of day, so those get the date alone rather than a fake 8:00pm."""
+    dt = datetime.fromtimestamp(ts, EASTERN)
+    stamp = dt.strftime("%b %d")
+    if ts % 86400:
+        stamp += dt.strftime(" %-I:%M%p").lower() + " ET"
+    age = now - ts
+    if age < 3600:
+        rel = f"{int(age // 60)}m ago"
+    elif age < 48 * 3600:
+        rel = f"{int(age // 3600)}h ago"
+    else:
+        rel = f"{int(age // 86400)}d ago"
+    return f"{stamp} · {rel}"
+
+
 def render(jobs, held=0):
     """Return (plain_text, html) for the new-jobs digest."""
     jobs = sorted(jobs, key=lambda j: (j["company_name"].lower(), j["title"].lower()))
+    now = time.time()
     lines, rows = [], []
     for j in jobs:
         where = ", ".join(j.get("locations") or []) or "—"
-        posted = datetime.fromtimestamp(j["date_posted"], timezone.utc).strftime("%b %d")
+        posted = posted_str(j["date_posted"], now)
         lines.append(f"{j['company_name']} — {j['title']}\n  {where} · {j['category']} · posted {posted}\n  {j['url']}\n")
         rows.append(
             "<tr>"
