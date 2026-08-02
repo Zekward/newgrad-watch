@@ -1,0 +1,6 @@
+# Local snapshot of the upstream feed, refreshed by hand for poking at the data.
+# 12MB and always stale — fetch it rather than commit it.
+listings.json
+
+__pycache__/
+*.pyc
