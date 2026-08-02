@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 from pathlib import Path
 
+import sources
+
 try:
     from zoneinfo import ZoneInfo
 
@@ -41,12 +43,13 @@ def fetch_feed():
 
 
 def is_relevant(job, now):
-    return (
-        job.get("active")
-        and job.get("is_visible")
-        and job.get("category") in CATEGORIES
-        and now - job.get("date_posted", 0) <= MAX_AGE_DAYS * 86400
-    )
+    if not (job.get("active") and job.get("is_visible") and job.get("category") in CATEGORIES):
+        return False
+    if job.get("source") == "direct":
+        # Company boards don't backfill, so a first sighting really is a new opening. Their
+        # timestamps are last-updated rather than first-posted, which would misread as stale.
+        return True
+    return now - job.get("date_posted", 0) <= MAX_AGE_DAYS * 86400
 
 
 def load_seen():
@@ -170,6 +173,10 @@ def main():
         return
 
     feed = json.loads(Path(args.feed_file).read_text()) if args.feed_file else fetch_feed()
+    if not args.feed_file:
+        direct = sources.fetch_all(now)
+        print(f"direct boards: {len(direct)} new-grad rows")
+        feed += direct
     all_ids = {j["id"] for j in feed}
     relevant = {j["id"]: j for j in feed if is_relevant(j, now)}
 
@@ -190,7 +197,11 @@ def main():
         # Keep ids that are still upstream so a delisted-then-relisted job doesn't re-alert,
         # and drop ids that fell out of the feed entirely so state stays bounded. Only the
         # postings actually emailed get marked seen, so any overflow rolls into the next run.
-        save_seen((seen & all_ids) | {j["id"] for j in batch})
+        # Simplify ids get pruned once they leave the feed, but direct ids are kept forever:
+        # if a company's board is briefly unreachable its ids vanish from all_ids, and pruning
+        # them would re-alert every one of its roles on the next successful run.
+        keep = (seen & all_ids) | {i for i in seen if i.startswith("direct:")}
+        save_seen(keep | {j["id"] for j in batch})
 
     if not batch:
         print("no new postings")

@@ -2,8 +2,8 @@ name: watch
 
 on:
   schedule:
-    # 9am / 1pm / 5pm US Eastern (EDT). Times shift an hour in winter; GitHub cron is UTC-only.
-    - cron: "0 13,17,21 * * *"
+    # Every 4 hours. Each run banks everything that appeared since the previous one.
+    - cron: "0 */4 * * *"
   workflow_dispatch:
     inputs:
       test_email:
