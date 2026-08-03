@@ -5,6 +5,11 @@ on:
     # 9am US Eastern. Emails everything banked since the last digest.
     - cron: "0 13 * * *"
   workflow_dispatch:
+    inputs:
+      recent:
+        description: "Send a snapshot of the N most recent postings instead of the digest (leaves the watermark alone)"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -28,7 +33,7 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-        run: python notify.py
+        run: python notify.py ${{ inputs.recent && format('--recent {0}', inputs.recent) || '' }}
 
       - name: Commit watermark
         run: |

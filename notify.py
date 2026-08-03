@@ -21,9 +21,28 @@ def main():
     ap.add_argument("--since", type=int, help="override the watermark (epoch seconds)")
     ap.add_argument("--seed", action="store_true",
                     help="mark everything currently stored as already sent, without emailing")
+    ap.add_argument("--recent", type=int, metavar="N",
+                    help="email the N most recently posted jobs in the store and leave the "
+                         "watermark alone, so the next scheduled digest is unaffected")
     args = ap.parse_args()
 
     now = time.time()
+
+    if args.recent:
+        picks = sorted(store.read_all(), key=lambda r: r.get("posted_at", 0),
+                       reverse=True)[:args.recent]
+        if not picks:
+            print("store is empty")
+            return 0
+        text, body_html = digest.render(picks, now)
+        subject = f"[new grad] {len(picks)} most recent postings (snapshot)"
+        if args.dry_run:
+            print(subject)
+            print(text)
+            return 0
+        digest.send_email(subject, text, body_html)
+        print(f"emailed {len(picks)} most recent postings; watermark unchanged")
+        return 0
 
     if args.seed:
         store.set_watermark(now)
