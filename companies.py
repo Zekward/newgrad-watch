@@ -82,4 +82,16 @@ ROSTER = {
         ("Shield AI", "shieldai"),
         ("Spotify", "spotify"),
     ],
+    # Workday needs three values, not one: (tenant, wd number, site slug). None are guessable —
+    # each was read off the company's careers page and confirmed to return a non-zero total.
+    "workday": [
+        ("NVIDIA", ("nvidia", 5, "NVIDIAExternalCareerSite")),
+        ("Boeing", ("boeing", 1, "EXTERNAL_CAREERS")),
+        ("Intel", ("intel", 1, "External")),
+        ("Micron", ("micron", 1, "External")),
+        ("Adobe", ("adobe", 5, "external_experienced")),
+        ("Morgan Stanley", ("ms", 5, "External")),
+        ("Citi", ("citi", 5, "2")),
+        ("Capital One", ("capitalone", 12, "Capital_One")),
+    ],
 }
