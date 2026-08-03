@@ -189,7 +189,10 @@ def fetch_all(now, workers=12):
     def one(target):
         platform, company, slug = target
         try:
-            return company, FETCHERS[platform](company, slug, now), None
+            found = FETCHERS[platform](company, slug, now)
+            for row in found:  # so the store records which platform it came from
+                row["board"] = platform
+            return company, found, None
         except Exception as e:  # network, JSON, or a slug that stopped resolving
             return company, [], f"{platform}/{slug}: {e}"
 

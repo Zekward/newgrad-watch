@@ -1,53 +1,79 @@
 # newgrad-watch
 
-Emails you new-grad postings the moment they land in
-[SimplifyJobs/New-Grad-Positions](https://github.com/SimplifyJobs/New-Grad-Positions).
-Simplify scrapes company career pages hourly and commits new rows to
-`.github/scripts/listings.json`; this repo polls that file three times a day,
-diffs it against what it saw last time, and emails the delta.
+Aggregates new-grad software roles from the
+[SimplifyJobs](https://github.com/SimplifyJobs/New-Grad-Positions) feed **and** 66 company job
+boards, banks them in one store, and emails you a digest each morning.
 
-## What gets emailed
+## How it runs
 
-A posting has to be `active`, `is_visible`, in one of `Software` / `AI/ML/Data` /
-`Quant`, and posted within the last 7 days. Edit `CATEGORIES` and `MAX_AGE_DAYS`
-at the top of [watch.py](watch.py) to change that.
+Two jobs, deliberately separate:
 
-`MAX_AGE_DAYS` matters more than it looks. Simplify frequently adds a listing to
-the feed days or weeks after the company posted it, so "never seen before" and
-"recently posted" are different things — without the cap, a first sighting of a
-three-week-old job arrives looking like breaking news. Emails are ordered newest
-first.
+| | When | What it does |
+| --- | --- | --- |
+| `collect.py` | every 4 hours | fetches every source, normalizes, appends new postings to `data/`. Sends nothing. |
+| `notify.py` | 9am ET daily | emails everything banked since the last digest. Fetches nothing. |
 
-Each email carries at most `MAX_PER_EMAIL` (50) postings, newest first. Anything
-over that stays unseen and rolls into the next run rather than being dropped, so
-a backlog drains 50 at a time instead of arriving as one wall of text.
+Splitting them means a flaky job board can never cost you a digest, and a digest can be
+re-sent without re-fetching. It also makes `data/` a queryable history rather than a
+throwaway cache.
+
+## The store
+
+`data/jobs-YYYY-MM.ndjson`, one JSON record per line, append-only:
+
+```json
+{"id":"gh:spacex:864","url_key":"boards.greenhouse.io/spacex/jobs/864","source":"greenhouse",
+ "company":"SpaceX","title":"New Graduate Engineer, Propulsion","locations":["Starbase, TX"],
+ "category":"Software","url":"https://…","posted_at":1785622681,"first_seen_at":1785640000}
+```
+
+`posted_at` is what the source claims and is not trustworthy — Simplify backfills weeks-old
+listings, and Workday reports only `"30+ Days Ago"`. **`first_seen_at` is when we saw it**,
+which is what every "what's new" query uses. That's why there is no diffing and no seen-set:
+the digest is just `first_seen_at > watermark`.
+
+`url_key` (host + path, query stripped) dedupes the same job arriving from Simplify and from
+the company's own board.
+
+NDJSON rather than SQLite specifically because of git — text appends keep history small,
+whereas a rewritten binary file would add megabytes per day.
+
+## Sources
+
+`companies.py` holds 66 verified boards across four platforms. Greenhouse, Ashby and Lever
+need one slug; Workday needs `(tenant, wd number, site)`, none of which are guessable — read
+them off the company's careers URL.
+
+Add one by confirming the board responds, then adding a line:
+
+```bash
+curl -s "https://boards-api.greenhouse.io/v1/boards/SLUG/jobs" | python3 -c "import json,sys;print(len(json.load(sys.stdin)['jobs']),'jobs')"
+```
+
+A slug that goes stale returns zero rows silently, so `collect.py` prints a per-board
+`ok/total` count every run.
+
+Direct-board rows must name new-grad status in the title (`sources.NEW_GRAD_RE`) and must not
+look senior or be an internship (`sources.EXCLUDE_RE`). Without that these boards are a
+firehose — SpaceX alone lists 2,100 roles.
 
 ## Setup
 
-Add three repo secrets (Settings → Secrets and variables → Actions):
+Three repo secrets under Settings → Secrets and variables → Actions:
 
 | Secret | Value |
 | --- | --- |
 | `GMAIL_USER` | the Gmail address that sends |
-| `GMAIL_APP_PASSWORD` | a 16-char app password from https://myaccount.google.com/apppasswords (needs 2FA on) |
-| `EMAIL_TO` | where to deliver; defaults to `GMAIL_USER` if unset |
-
-Then enable Actions. The workflow runs `0 13,17,21 * * *` — 9am / 1pm / 5pm US
-Eastern — and on manual dispatch.
-
-## State
-
-`state/seen.json` is the set of listing ids already accounted for. The workflow
-commits it back to the repo after each run that changes it. If the file is
-missing, the run **bootstraps**: it records every id and sends no email, so you
-never get one 900-item blast.
+| `GMAIL_APP_PASSWORD` | 16-char app password from https://myaccount.google.com/apppasswords |
+| `EMAIL_TO` | where to deliver; defaults to `GMAIL_USER` |
 
 ## Local use
 
 ```bash
-python3 watch.py --dry-run          # print the digest instead of sending
-python3 watch.py --feed-file f.json # use a local snapshot instead of the network
+python3 collect.py --dry-run     # what would be added, writes nothing
+python3 notify.py  --dry-run     # print the digest, send nothing, move no watermark
+python3 notify.py  --seed        # mark everything stored as sent (use after a bulk import)
 ```
 
-`--dry-run` never writes `state/seen.json`, so it won't swallow a delta that the
-real run should have emailed.
+`refresh-listings.sh` keeps a pruned local copy of the raw Simplify feed for poking at by
+hand. Nothing in the pipeline reads it.
