@@ -10,6 +10,7 @@ so rows from here carry source="direct" and skip the age filter. First sighting 
 
 import json
 import urllib.error
+from concurrent import futures
 import urllib.request
 from datetime import datetime
 
@@ -111,19 +112,26 @@ def lever(company, slug, now):
 FETCHERS = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever}
 
 
-def fetch_all(now):
-    """Every new-grad row across the roster. A board that errors is skipped with a warning
-    rather than failing the run — one dead slug shouldn't cost you the other thirteen."""
-    rows, empty = [], []
-    for platform, entries in companies.ROSTER.items():
-        for company, slug in entries:
-            try:
-                found = FETCHERS[platform](company, slug, now)
-            except (urllib.error.URLError, json.JSONDecodeError, KeyError, TimeoutError) as e:
-                print(f"  warn: {company} ({platform}/{slug}) failed: {e}")
-                empty.append(company)
-                continue
+def fetch_all(now, workers=12):
+    """Every new-grad row across the roster, fetched concurrently. A board that errors is
+    skipped with a warning rather than failing the run — one dead slug shouldn't cost you
+    the other fifty-seven."""
+    targets = [(p, c, s) for p, entries in companies.ROSTER.items() for c, s in entries]
+
+    def one(target):
+        platform, company, slug = target
+        try:
+            return company, FETCHERS[platform](company, slug, now), None
+        except Exception as e:  # network, JSON, or a slug that stopped resolving
+            return company, [], f"{platform}/{slug}: {e}"
+
+    rows, failed = [], []
+    with futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        for company, found, err in pool.map(one, targets):
+            if err:
+                failed.append(f"{company} ({err})")
             rows.extend(found)
-    if empty:
-        print(f"  warn: {len(empty)} board(s) unreachable: {', '.join(empty)}")
+    print(f"  boards: {len(targets) - len(failed)}/{len(targets)} ok, {len(rows)} new-grad rows")
+    for f in failed:
+        print(f"  warn: {f}")
     return rows
