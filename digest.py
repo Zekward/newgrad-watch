@@ -16,6 +16,22 @@ except Exception:  # no system tzdata available
     EASTERN = timezone.utc
 
 
+# Where a posting came from. Greenhouse/Ashby/Lever/Workday mean we read the company's own
+# board directly; Simplify means it came via the aggregated feed, which lags and can carry
+# a miscategorized row.
+SOURCE_LABELS = {
+    "simplify": "Simplify feed",
+    "greenhouse": "Greenhouse (direct)",
+    "ashby": "Ashby (direct)",
+    "lever": "Lever (direct)",
+    "workday": "Workday (direct)",
+}
+
+
+def source_label(source):
+    return SOURCE_LABELS.get(source, source or "unknown")
+
+
 def posted_str(ts, now):
     """'Jul 31 6:14pm ET · 5h ago'. Sources that report only a date land on UTC midnight,
     so those get the date alone rather than a fabricated 8:00pm."""
@@ -40,14 +56,20 @@ def render(records, now, held=0):
     for r in records:
         where = ", ".join(r.get("locations") or []) or "—"
         posted = posted_str(r.get("posted_at", now), now)
-        via = "" if r.get("source") == "simplify" else f" · via {r['company']} careers"
-        lines.append(f"{r['company']} — {r['title']}\n  {where} · {r['category']} · posted {posted}\n  {r['url']}\n")
+        src = source_label(r.get("source"))
+        direct = r.get("source") != "simplify"
+        lines.append(f"{r['company']} — {r['title']}\n  {where} · {r['category']} · posted {posted}"
+                     f"\n  source: {src}\n  {r['url']}\n")
+        pill_bg, pill_fg = ("#e8f3ec", "#1c6b3f") if direct else ("#eef1f6", "#4a5566")
         rows.append(
             "<tr>"
             f"<td style='padding:8px 12px 8px 0;vertical-align:top'><b>{html.escape(r['company'] or '')}</b></td>"
             f"<td style='padding:8px 0'><a href='{html.escape(r['url'] or '')}'>{html.escape(r['title'] or '')}</a>"
             f"<div style='color:#666;font-size:13px'>{html.escape(where)} · {html.escape(r['category'] or '')}"
-            f" · posted {posted}{html.escape(via)}</div></td>"
+            f" · posted {posted}</div>"
+            f"<div style='margin-top:4px'><span style='font-size:11px;letter-spacing:.04em;"
+            f"background:{pill_bg};color:{pill_fg};border-radius:4px;padding:2px 7px'>"
+            f"{html.escape(src)}</span></div></td>"
             "</tr>"
         )
     overflow = f" {held} more are queued for tomorrow." if held else ""
